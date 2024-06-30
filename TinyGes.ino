@@ -1,4 +1,4 @@
-#include <TinyGes.h>
+#include <TinyGes_inferencing.h>
 #include "I2Cdev.h"
 #include "MPU6050.h"
 #include "Wire.h"
