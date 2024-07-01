@@ -4,6 +4,7 @@
 #include "Wire.h"
 #include <NTPClient.h>
 #include <WiFi.h>
+
 /* Constant defines -------------------------------------------------------- */
 MPU6050 imu;
 int16_t ax, ay, az;
@@ -15,24 +16,10 @@ const char* password = "Ahnaf767";
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 21600); // Use NTP server and time offset
 bool checker = false;
 bool checker2 = false;
 String formattedDate;
-/*
- ** NOTE: If you run into TFLite arena allocation issue.
- **
- ** This may be due to may dynamic memory fragmentation.
- ** Try defining "-DEI_CLASSIFIER_ALLOCATION_STATIC" in boards.local.txt (create
- ** if it doesn't exist) and copy this file to
- ** `<ARDUINO_CORE_INSTALL_PATH>/arduino/hardware/<mbed_core>/<core_version>/`.
- **
- ** See
- ** (https://support.arduino.cc/hc/en-us/articles/360012076960-Where-are-the-installed-cores-located-)
- ** to find where Arduino installs cores on your machine.
- **
- ** If the problem persists then there's not enough memory for this model and application.
- */
 
 /* Private variables ------------------------------------------------------- */
 static bool debug_nn = false;  // Set this to true to see e.g. features generated from the raw signal
@@ -118,7 +105,7 @@ void loop() {
     delayMicroseconds(next_tick - micros());
   }
 
-  // Turn the raw buffer in a signal which we can the classify
+  // Turn the raw buffer in a signal which we can then classify
   signal_t signal;
   int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
   if (err != 0) {
@@ -143,12 +130,25 @@ void loop() {
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
   }
-  if (result.classification[0].value >= 0.7){
+  
+  timeClient.update(); // Update the time
+  int hour = timeClient.getHours();
+  String am_pm = (hour >= 12) ? "PM" : "AM";
+  hour = (hour % 12 == 0) ? 12 : hour % 12; // Convert hour to 12-hour format
+  formattedDate = String(hour) + ":" + timeClient.getMinutes() + " " + am_pm + " " + daysOfTheWeek[timeClient.getDay()];
+
+  if (result.classification[0].value >= 0.7) {
     checker = true;
-    ei_printf("Checked in at: " + timeClient.getFormattedTime() + daysOfTheWeek[timeClient.getDay()] + "by Ahnaf")
+    Serial.print("Checked in at: ");
+    Serial.print(formattedDate);
+    Serial.println(" by" + String(result.classification[0].label));
   } 
-  if (result.classification[1].value >= 0.7){
+  
+  if (result.classification[1].value >= 0.7) {
     checker2 = true;
-    ei_printf("Checked in at: " + timeClient.getFormattedTime() + daysOfTheWeek[timeClient.getDay()] + "by Shaila Sharmin")
+    Serial.print("Checked in at: ");
+    Serial.print(formattedDate);
+    Serial.println(" by" + String(result.classification[1].label));
   }
 }
+
