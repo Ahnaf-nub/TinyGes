@@ -2,15 +2,23 @@
 #include "I2Cdev.h"
 #include "MPU6050.h"
 #include "Wire.h"
-
+#include <NTPClient.h>
+#include <WiFi.h>
 /* Constant defines -------------------------------------------------------- */
 MPU6050 imu;
 int16_t ax, ay, az;
-
+const char* ssid = "Mahir";
+const char* password = "Ahnaf767";
 #define ACC_RANGE 1  // 0: -/+2G; 1: +/-4G
 #define CONVERT_G_TO_MS2 (9.81 / (16384 / (1. + ACC_RANGE)))
 #define MAX_ACCEPTED_RANGE (2 * 9.81) + (2 * 9.81) * ACC_RANGE
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+bool checker = false;
+bool checker2 = false;
+String formattedDate;
 /*
  ** NOTE: If you run into TFLite arena allocation issue.
  **
@@ -35,9 +43,11 @@ static bool debug_nn = false;  // Set this to true to see e.g. features generate
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  timeClient.begin();
+  timeClient.setTimeOffset(21600);
   // comment out the below line to cancel the wait for USB connection (needed for native USB)
-  while (!Serial)
-    ;
+  while (!Serial);
   Serial.println("Edge Impulse Inferencing Demo");
 
   // initialize device
@@ -78,10 +88,7 @@ float ei_get_sign(float number) {
 * @param[in]  debug  Get debug info if true
 */
 void loop() {
-  // ei_printf("\nStarting inferencing in 2 seconds...\n");
-
-  // delay(2000);
-
+  
   ei_printf("Sampling...\n");
 
   // Allocate a buffer here for the values we'll read from the IMU
@@ -135,5 +142,13 @@ void loop() {
   ei_printf(": \n");
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
+  }
+  if (result.classification[0].value >= 0.7){
+    checker = true;
+    ei_printf("Checked in at: " + timeClient.getFormattedTime() + daysOfTheWeek[timeClient.getDay()] + "by Ahnaf")
+  } 
+  if (result.classification[1].value >= 0.7){
+    checker2 = true;
+    ei_printf("Checked in at: " + timeClient.getFormattedTime() + daysOfTheWeek[timeClient.getDay()] + "by Shaila Sharmin")
   }
 }
