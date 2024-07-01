@@ -75,7 +75,7 @@ float ei_get_sign(float number) {
 * @param[in]  debug  Get debug info if true
 */
 void loop() {
-  
+  timeClient.update();
   ei_printf("Sampling...\n");
 
   // Allocate a buffer here for the values we'll read from the IMU
@@ -131,7 +131,6 @@ void loop() {
     ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
   }
   
-  timeClient.update(); // Update the time
   int hour = timeClient.getHours();
   String am_pm = (hour >= 12) ? "PM" : "AM";
   hour = (hour % 12 == 0) ? 12 : hour % 12; // Convert hour to 12-hour format
@@ -141,14 +140,14 @@ void loop() {
     checker = true;
     Serial.print("Checked in at: ");
     Serial.print(formattedDate);
-    Serial.println(" by" + String(result.classification[0].label));
+    Serial.println(" by " + String(result.classification[0].label));
   } 
   
-  if (result.classification[1].value >= 0.7) {
+  if (result.classification[2].value >= 0.7) {
     checker2 = true;
     Serial.print("Checked in at: ");
     Serial.print(formattedDate);
-    Serial.println(" by" + String(result.classification[1].label));
+    Serial.println(" by " + String(result.classification[2].label));
   }
 }
 
