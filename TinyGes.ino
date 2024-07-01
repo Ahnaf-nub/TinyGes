@@ -13,10 +13,10 @@ const char* password = "Ahnaf767";
 #define ACC_RANGE 1  // 0: -/+2G; 1: +/-4G
 #define CONVERT_G_TO_MS2 (9.81 / (16384 / (1. + ACC_RANGE)))
 #define MAX_ACCEPTED_RANGE (2 * 9.81) + (2 * 9.81) * ACC_RANGE
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 21600); // Use NTP server and time offset
+NTPClient timeClient(ntpUDP);  // Use NTP server and time offset
 bool checker = false;
 bool checker2 = false;
 String formattedDate;
@@ -34,7 +34,8 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(21600);
   // comment out the below line to cancel the wait for USB connection (needed for native USB)
-  while (!Serial);
+  while (!Serial)
+    ;
   Serial.println("Edge Impulse Inferencing Demo");
 
   // initialize device
@@ -75,7 +76,9 @@ float ei_get_sign(float number) {
 * @param[in]  debug  Get debug info if true
 */
 void loop() {
-  timeClient.update();
+  while (!timeClient.update()) {
+    timeClient.forceUpdate();
+  }
   ei_printf("Sampling...\n");
 
   // Allocate a buffer here for the values we'll read from the IMU
@@ -90,7 +93,6 @@ void loop() {
     buffer[ix + 1] = ay;
     buffer[ix + 2] = az;
 
-    //ei_printf("raw values:    %.2f, %.2f, %.2f\n", ax*CONVERT_G_TO_MS2, ay*CONVERT_G_TO_MS2, az*CONVERT_G_TO_MS2);
 
     buffer[ix + 0] *= CONVERT_G_TO_MS2;
     buffer[ix + 1] *= CONVERT_G_TO_MS2;
@@ -130,10 +132,10 @@ void loop() {
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
   }
-  
+
   int hour = timeClient.getHours();
   String am_pm = (hour >= 12) ? "PM" : "AM";
-  hour = (hour % 12 == 0) ? 12 : hour % 12; // Convert hour to 12-hour format
+  hour = (hour % 12 == 0) ? 12 : hour % 12;  // Convert hour to 12-hour format
   formattedDate = String(hour) + ":" + timeClient.getMinutes() + " " + am_pm + " " + daysOfTheWeek[timeClient.getDay()];
 
   if (result.classification[0].value >= 0.7) {
@@ -141,8 +143,8 @@ void loop() {
     Serial.print("Checked in at: ");
     Serial.print(formattedDate);
     Serial.println(" by " + String(result.classification[0].label));
-  } 
-  
+  }
+
   if (result.classification[2].value >= 0.7) {
     checker2 = true;
     Serial.print("Checked in at: ");
@@ -150,4 +152,3 @@ void loop() {
     Serial.println(" by " + String(result.classification[2].label));
   }
 }
-
