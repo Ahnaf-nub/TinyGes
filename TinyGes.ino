@@ -17,7 +17,7 @@ char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thurs
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);  // Use NTP server and time offset
-bool checker = false;
+bool checker1 = false;
 bool checker2 = false;
 String formattedDate;
 
@@ -34,9 +34,8 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(21600);
   // comment out the below line to cancel the wait for USB connection (needed for native USB)
-  while (!Serial)
-    ;
-  Serial.println("Edge Impulse Inferencing Demo");
+  while (!Serial || WiFi.status() != WL_CONNECTED)
+    ;  //Wait until wifi is connected and serial port is also connected
 
   // initialize device
   Serial.println("Initializing I2C devices...");
@@ -44,7 +43,7 @@ void setup() {
   imu.initialize();
   delay(10);
 
-  //Set MCU 6050 OffSet Calibration
+  // Set MCU 6050 Offset Calibration
   imu.setXAccelOffset(-2788);
   imu.setYAccelOffset(-1952);
   imu.setZAccelOffset(2172);
@@ -76,11 +75,6 @@ float ei_get_sign(float number) {
 * @param[in]  debug  Get debug info if true
 */
 void loop() {
-  while (!timeClient.update()) {
-    timeClient.forceUpdate();
-  }
-  ei_printf("Sampling...\n");
-
   // Allocate a buffer here for the values we'll read from the IMU
   float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
 
@@ -92,7 +86,6 @@ void loop() {
     buffer[ix + 0] = ax;
     buffer[ix + 1] = ay;
     buffer[ix + 2] = az;
-
 
     buffer[ix + 0] *= CONVERT_G_TO_MS2;
     buffer[ix + 1] *= CONVERT_G_TO_MS2;
@@ -125,30 +118,46 @@ void loop() {
   }
 
   // print the predictions
-  ei_printf("Predictions ");
+  /* ei_printf("Predictions ");
   ei_printf("(DSP: %d ms., Classification: %d ms., Anomaly: %d ms.)",
             result.timing.dsp, result.timing.classification, result.timing.anomaly);
   ei_printf(": \n");
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
+  }*/
+  while (!timeClient.update()) {
+    timeClient.forceUpdate();
   }
-
   int hour = timeClient.getHours();
   String am_pm = (hour >= 12) ? "PM" : "AM";
-  hour = (hour % 12 == 0) ? 12 : hour % 12;  // Convert hour to 12-hour format
-  formattedDate = String(hour) + ":" + timeClient.getMinutes() + " " + am_pm + " " + daysOfTheWeek[timeClient.getDay()];
+  formattedDate = timeClient.getFormattedTime() + " " + am_pm + " " + daysOfTheWeek[timeClient.getDay()];
 
-  if (result.classification[0].value >= 0.7) {
-    checker = true;
-    Serial.print("Checked in at: ");
-    Serial.print(formattedDate);
-    Serial.println(" by " + String(result.classification[0].label));
+  // Check-in and Check-out logic
+  if (result.classification[0].value >= 0.8) {
+    if (!checker1) {
+      checker1 = true;
+      Serial.print("Checked in at: ");
+      Serial.print(formattedDate);
+      Serial.println(" by " + String(result.classification[0].label));
+    } else {
+      checker1 = false;
+      Serial.print("Checked out at: ");
+      Serial.print(formattedDate);
+      Serial.println(" by " + String(result.classification[0].label));
+    }
   }
 
-  if (result.classification[2].value >= 0.7) {
-    checker2 = true;
-    Serial.print("Checked in at: ");
-    Serial.print(formattedDate);
-    Serial.println(" by " + String(result.classification[2].label));
+  if (result.classification[2].value >= 0.85) {
+    if (!checker2) {
+      checker2 = true;
+      Serial.print("Checked in at: ");
+      Serial.print(formattedDate);
+      Serial.println(" by " + String(result.classification[2].label));
+    } else {
+      checker2 = false;
+      Serial.print("Checked out at: ");
+      Serial.print(formattedDate);
+      Serial.println(" by " + String(result.classification[2].label));
+    }
   }
 }
