@@ -4,12 +4,21 @@
 #include "Wire.h"
 #include <NTPClient.h>
 #include <WiFi.h>
+#include <FirebaseESP32.h>
+
+#define FIREBASE_HOST "tinyges-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define WIFI_SSID "Mahir"         // Change the name of your WIFI
+#define WIFI_PASSWORD "Ahnaf767"  // Change the password of your WIFI
+#define FIREBASE_AUTH "AIzaSyCnp1jYGlWrOJ6312Pun7i3ExNe6BB1HNA"
+
+FirebaseData firebaseData;
+FirebaseJson json;
 
 /* Constant defines -------------------------------------------------------- */
 MPU6050 imu;
 int16_t ax, ay, az;
-const char* ssid = "Mahir";
-const char* password = "Ahnaf767";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 #define ACC_RANGE 1  // 0: -/+2G; 1: +/-4G
 #define CONVERT_G_TO_MS2 (9.81 / (16384 / (1. + ACC_RANGE)))
 #define MAX_ACCEPTED_RANGE (2 * 9.81) + (2 * 9.81) * ACC_RANGE
@@ -25,115 +34,71 @@ String formattedDate;
 static bool debug_nn = false;  // Set this to true to see e.g. features generated from the raw signal
 
 /**
-* @brief      Arduino setup function
-*/
+ * @brief      Arduino setup function
+ */
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
+
   timeClient.begin();
   timeClient.setTimeOffset(21600);
-  // comment out the below line to cancel the wait for USB connection (needed for native USB)
-  while (!Serial || WiFi.status() != WL_CONNECTED)
-    ;  //Wait until wifi is connected and serial port is also connected
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi(true);
 
   // initialize device
   Serial.println("Initializing I2C devices...");
   Wire.begin();
   imu.initialize();
-  delay(10);
 
-  // Set MCU 6050 Offset Calibration
+  // Set MPU6050 Offset Calibration
   imu.setXAccelOffset(-2788);
-  imu.setYAccelOffset(-1952);
-  imu.setZAccelOffset(2172);
-  imu.setXGyroOffset(144);
-  imu.setYGyroOffset(-22);
-  imu.setZGyroOffset(12);
-
-  imu.setFullScaleAccelRange(ACC_RANGE);
-
-  if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != 3) {
-    ei_printf("ERR: EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME should be equal to 3 (the 3 sensor axes)\n");
-    return;
-  }
+  imu.setYAccelOffset(807);
+  imu.setZAccelOffset(1210);
+  imu.setXGyroOffset(66);
+  imu.setYGyroOffset(-12);
+  imu.setZGyroOffset(16);
 }
 
 /**
- * @brief Return the sign of the number
- * 
- * @param number 
- * @return int 1 if positive (or 0) -1 if negative
+ * @brief      Arduino main loop
  */
-float ei_get_sign(float number) {
-  return (number >= 0.0) ? 1.0 : -1.0;
-}
-
-/**
-* @brief      Get data and run inferencing
-*
-* @param[in]  debug  Get debug info if true
-*/
 void loop() {
-  // Allocate a buffer here for the values we'll read from the IMU
-  float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
+  // Put your main code here, to run repeatedly:
+  imu.getAcceleration(&ax, &ay, &az);
 
-  for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += 3) {
-    // Determine the next tick (and then sleep later)
-    uint64_t next_tick = micros() + (EI_CLASSIFIER_INTERVAL_MS * 1000);
-
-    imu.getAcceleration(&ax, &ay, &az);
-    buffer[ix + 0] = ax;
-    buffer[ix + 1] = ay;
-    buffer[ix + 2] = az;
-
-    buffer[ix + 0] *= CONVERT_G_TO_MS2;
-    buffer[ix + 1] *= CONVERT_G_TO_MS2;
-    buffer[ix + 2] *= CONVERT_G_TO_MS2;
-
-    for (int i = 0; i < 3; i++) {
-      if (fabs(buffer[ix + i]) > MAX_ACCEPTED_RANGE) {
-        buffer[ix + i] = ei_get_sign(buffer[ix + i]) * MAX_ACCEPTED_RANGE;
-      }
-    }
-
-    delayMicroseconds(next_tick - micros());
-  }
-
-  // Turn the raw buffer in a signal which we can then classify
   signal_t signal;
-  int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+  int err = get_signal_from_mpu6050(&imu, &signal);
   if (err != 0) {
-    ei_printf("Failed to create signal from buffer (%d)\n", err);
+    ei_printf("Failed to get signal (%d)\n", err);
     return;
   }
 
-  // Run the classifier
   ei_impulse_result_t result = { 0 };
 
+  // Run the classifier
   err = run_classifier(&signal, &result, debug_nn);
   if (err != EI_IMPULSE_OK) {
     ei_printf("ERR: Failed to run classifier (%d)\n", err);
     return;
   }
 
-  // print the predictions
-  /* ei_printf("Predictions ");
-  ei_printf("(DSP: %d ms., Classification: %d ms., Anomaly: %d ms.)",
-            result.timing.dsp, result.timing.classification, result.timing.anomaly);
-  ei_printf(": \n");
-  for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-    ei_printf("    %s: %.5f\n", result.classification[ix].label, result.classification[ix].value);
-  }*/
+  // Ensure time is updated
   while (!timeClient.update()) {
     timeClient.forceUpdate();
   }
+
   int hour = timeClient.getHours();
   String am_pm = (hour >= 12) ? "PM" : "AM";
   formattedDate = timeClient.getFormattedTime() + " " + am_pm + " " + daysOfTheWeek[timeClient.getDay()];
 
   // Check-in and Check-out logic
-  if (result.classification[0].value >= 0.8) {
+  if (result.classification[0].value >= 0.95) {
     if (!checker1) {
       checker1 = true;
       Serial.print("Checked in at: ");
@@ -147,7 +112,7 @@ void loop() {
     }
   }
 
-  if (result.classification[2].value >= 0.85) {
+  if (result.classification[2].value >= 0.95) {
     if (!checker2) {
       checker2 = true;
       Serial.print("Checked in at: ");
@@ -160,4 +125,10 @@ void loop() {
       Serial.println(" by " + String(result.classification[2].label));
     }
   }
+
+  Firebase.setString(firebaseData, "/TinyGes/Status for Ahnaf", checker1 ? "Checked In" : "Checked Out");
+  Firebase.setString(firebaseData, "/TinyGes/Status for x", checker2 ? "Checked In" : "Checked Out");
+  Firebase.setString(firebaseData, "/TinyGes/Time_and_Date", formattedDate);
+
+  delay(10000);  // Wait for 10 seconds before repeating
 }
