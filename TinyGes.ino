@@ -37,7 +37,7 @@ String htmlPage = R"=====(
 <head>
   <title>Check-in/Check-out Status</title>
   <style>
-    body { font-family: Arial, sans-serif; background-color: #f0f0f0; }
+    body { font-family: Arial, sans-serif; background-color: #581818; }
     .container { max-width: 600px; margin: 50px auto; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
     h1 { text-align: center; color: #333; }
     p { font-size: 1.2em; }
@@ -48,7 +48,7 @@ String htmlPage = R"=====(
 </head>
 <body>
   <div class="container">
-    <h1>Check-in/Check-out Status</h1>
+    <h1>TinyGes</h1>
     <div class="status">
       <p id="statusText">Loading...</p>
     </div>
@@ -92,14 +92,13 @@ void handleStatus() {
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
+  while (WiFi.status() != WL_CONNECTED)
+    ;
   Serial.println("Connected to WiFi");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-
+  timeClient.begin();
+  timeClient.setTimeOffset(21600);
   server.on("/", handleRoot);
   server.on("/status", handleStatus);
   server.begin();
@@ -113,9 +112,6 @@ void setup() {
   imu.setXGyroOffset(66);
   imu.setYGyroOffset(-12);
   imu.setZGyroOffset(16);
-
-  timeClient.begin();
-  timeClient.setTimeOffset(21600);
 }
 
 float ei_get_sign(float number) {
@@ -173,14 +169,14 @@ void loop() {
       checker1 = true;
       checkInTime1 = formattedDate;
       user1 = String(result.classification[0].label);
-      Serial.print(user1 + " checked in at: ");
-      Serial.println(formattedDate);
+      //Serial.print(user1 + " checked in at: ");
+      //Serial.println(formattedDate);
     } else {
       checker1 = false;
       checkOutTime1 = formattedDate;
       user1 = String(result.classification[0].label);
-      Serial.print(user1 + " checked out at: ");
-      Serial.println(formattedDate);
+      //Serial.print(user1 + " checked out at: ");
+      //Serial.println(formattedDate);
     }
   }
 
@@ -189,14 +185,14 @@ void loop() {
       checker2 = true;
       checkInTime2 = formattedDate;
       user2 = String(result.classification[2].label);
-      Serial.print(user2 + " checked in at: ");
-      Serial.println(formattedDate);
+      //Serial.print(user2 + " checked in at: ");
+      //Serial.println(formattedDate);
     } else {
       checker2 = false;
       checkOutTime2 = formattedDate;
       user2 = String(result.classification[2].label);
-      Serial.print(user2 + " checked out at: ");
-      Serial.println(formattedDate);
+      //Serial.print(user2 + " checked out at: ");
+      //Serial.println(formattedDate);
     }
   }
 }
